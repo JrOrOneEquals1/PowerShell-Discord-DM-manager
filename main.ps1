@@ -10,11 +10,22 @@ catch {
     Set-Content -Path "./discordCreds.txt" -Value "$username`n$password"
 }
 $headless = Read-Host -Prompt "Headless? [y/n]"
-$keyWord = Read-Host -Prompt "Messaging keyword"
-$fileName = Read-Host -Prompt "IP File Path"
-$ipList = Get-Content -Path $fileName
-$ips = $ipList.length-1
-
+$num = Read-Host -Prompt "Number of Keywords"
+$fileNames = @()
+$keyWordDict = @{}
+for($i = 0; $i -lt $num; $i++) {
+    $keyWord = Read-Host -Prompt "Messaging keyword"
+    $type = Read-Host -Prompt "Read from file? [y/n]"
+    if($type -eq "y") {
+        $fileName = Read-Host -Prompt "File Path"
+        $fileNames += $fileName
+        $value = Get-Content -Path $fileName
+    }
+    else {
+        $value = Read-Host -Prompt "Message"
+    }
+    $keyWordDict.add($keyWord, $value)
+}
 if($headless -eq "n") {
     $Driver = Start-SeChrome -Arguments @('start-maximized') -Quiet
 }
@@ -23,7 +34,7 @@ else {
 }
 Enter-SeUrl "https://www.discord.com/login" -Driver $Driver
 
-# Got this from an issue, lets you hover over an element
+# Got this from an issue on PowerShell Selenium by Adam Driscoll, lets you hover over an element
 function Set-SeMousePosition {
     [CmdletBinding()]
     param ($Driver, $Element )
@@ -91,7 +102,7 @@ while($true) {
     }
     $user = $newMessage[1].GetAttribute("aria-label") # This gets the users name
     $addS = ''
-    if($amount -gt 1) { # Gets correct usage for 'message' or 'messages'
+    if($amount -gt 1) { # Gets correct usage of 'message' or 'messages'
         $addS = 's'
     }
     Write-Host "Checking new message$addS from $user"
@@ -102,31 +113,42 @@ while($true) {
     $keyWords = 0
     for($i = 0; $i -lt $result.length; $i++) {
         $message = $result[$i]
-        if((Find-SeElement -driver $message -tagname "div")[0].GetAttribute("innerText") -eq $keyWord) { # Checks each messages text to see if it matches $keyWord
-            $send = $true
-            $keyWords += 1
-        }
-        elseif ($ipList -icontains $keyWord) {
-            $keyWords += 1
+        $messageText = (Find-SeElement -driver $message -tagname "div")[0].GetAttribute("innerText")
+        $keys = $keyWordDict.Keys
+        $keys = $keys | Select-Object -Last $Keys.length
+        foreach($key in $keys) {
+            if($keyWordDict.Item($key).GetType().Name -eq "String") {
+                if($messageText.Split(" ") -icontains $key) {
+                    $send = $true
+                    $message = $keyWordDict.Item($key)
+                    $keyWords += 1
+                }
+            }
+            else {
+                if($messageText -eq $key) { # Checks each messages text to see if it matches $keyWord
+                    $send = $true
+                    $message = $keyWordDict.Item($key)[-1]
+                    Set-Content -Path $fileNames[$keyWordDict.Keys.IndexOf($key)] -Value $message[0]
+                    for($i = 1; $i -lt $keyWordDict.Item($key).length-1; $i += 1) {
+                        Add-Content -Path $fileNames[$keyWordDict.Keys.IndexOf($key)] -Value $keyWordDict.Item($key)[$i]
+                    }
+                    $keyWordDict.Item($key) = Get-Content -Path $fileNames[$keyWordDict.Keys.IndexOf($key)]
+                    $keyWords += 1
+                }
+            }
         }
     }
     $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
     if($send) {
-        $IP = $ipList[$ips]
-        Write-Host "Sent IP $IP to $user"
+        Send-SeKeys -Element $chatboxes[0] -Keys "$message`n" # Send the message
         Add-Content -Path "./sentFile.txt" -Value $id # Send $id to file so the script knows to ignore new messages from that user
-        Send-SeKeys -Element $chatboxes[0] -Keys "$IP`n" # Send the IP
-        $ips -= 1
-        Set-Content -Path $fileName -Value $ipList[0]
-        for($i = 1; $i -le $ips; $i += 1) {
-            Add-Content -Path $fileName -Value $ipList[$i]
-        }
-        $ipList = Get-Content -Path $fileName
+        Write-Host "Sent '$message' to $user"
     }
     else {
         $length = $result.Length
         # Send $id, along with the amount of new messages, so the script knows to ignore until another message comes in
         Add-Content -Path "./notSentFile.txt" -Value "${id}:$length"
+        Write-Host "Didn't send message to $user"
     }
     # Set mouse to hover over message input box.  Prevents bugs from happening when mouse is already where it needs to be later
     Set-SeMousePosition -Driver $Driver -Element $chatboxes[0]
