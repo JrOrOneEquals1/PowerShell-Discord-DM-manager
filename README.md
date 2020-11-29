@@ -1,5 +1,27 @@
 # PowerShell Discord DM Manager
 ## Description
-This tool will go through all of your DM's on Discord and, if the specified key word is one of the unread messages, will send a specified message.  If there is an unread message that is not the key word, it will mark them as unread so you can read them later.  This is supposed to be similar to the discord.js script, but for DM's instead of server/channel messages.
+
+This PowerShell script will use the Selenium Web Driver to automatically respond to Direct Messages (DMs) that you receive in [Discord](https://discord.com) when keywords that you specify are received. This has only been tested on Windows.
+
 ## Installation
-First, you will need to install Selenium for PowerShell from [here](https://github.com/adamdriscoll/selenium-powershell).  Then get main.ps1 from here into a folder, and open a PowerShell prompt in the folder and run main.ps1.  It will ask for all of the information it needs.
+First, you will need to install Selenium for PowerShell from [here](https://github.com/adamdriscoll/selenium-powershell). This can be done from a PowerShell command prompt with the following command.
+
+```powershell
+Install-Module Selenium -Scope CurrentUser
+```
+
+Next, download the latest version of the web driver from http://chromedriver.chromium.org/downloads and replace the version of `chromedriver.exe` in your `Documents\WindowsPowerShell\Modules\Selenium\3.0.1\assemblies` directory.
+
+Download `main.ps1` from this repository and change your configuration settings at the top of the file before running it.
+
+## Usage
+
+Before starting the PowerShell script, remember to configure your settings for keywords and responses at the top of the file.
+
+Start the PowerShell Script as follows:
+
+```powershell
+./main.ps1
+```
+
+A web browser will load to the Discord login page and the script will pause. Complete the login manually using the browser and then return to the script and press any key to continue.
