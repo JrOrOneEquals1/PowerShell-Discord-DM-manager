@@ -88,11 +88,13 @@ while ($true) {
         $userName = (Find-SeElement -Driver $Driver -classname "username-1A8OIy")[0].GetAttribute("innerText")
         Write-Host -Fore Green "Checking $userName messages"
         $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
+        # $messagesList = Find-SeElement -Driver $Driver -classname "markup-2BOw-j" # These are all the messages in the chat
+
 
         $send = $false
-        $result = getNewMessages $messagesList
+        $results = getNewMessages $messagesList
         $keyWords = 0
-        foreach ($message in $result) {
+        foreach ($message in $results) {
             if ((Find-SeElement -driver $message -tagname "div")[0].GetAttribute("innerText") -eq $keyWord) {
                 # Checks each messages text to see if it matches $keyWord
                 $send = $true
@@ -109,20 +111,22 @@ while ($true) {
             $notSent.Remove($id)
         }
         else {
-            $notSent[$id] = $startTime 
+            $notSent[$id] = $startTime
         }
         $notSent.GetEnumerator() | select-object -Property Key, Value | Export-csv -NoTypeInformation $notSentFile
-        # Set mouse to hover over message input box.  Prevents bugs from happening when mouse is already where it needs to be later
-        Set-SeMousePosition -Driver $Driver -Element $chatboxes[0]
-        if ($result.Length -gt $keyWords -or (!$send -and ($result.Length -eq 1))) {
-            $clickee = $result[0]
-            Set-SeMousePosition -Driver $Driver -Element $clickee # Set mouse to hover over the earliest new message
-            $button = (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] # The three dots that show up on hover
-            Send-SeClick -Element $button
-            $clickee = (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2] # The 'Mark Unread' button in the three dots menu
-            Send-SeClick -Element $clickee
+
+        foreach ($result in $results) {
+            if (-not ($result.text -match "(\n|^)$keyWord`$")) {
+                # Mark messages as unread, click the message so the elipsis button shows up
+                $result | Invoke-SeClick
+                (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] | Invoke-SeClick  -Driver $Driver -JavaScriptClick # The three dots that show up on hover
+                (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2]  | Invoke-SeClick   -Driver $Driver -JavaScriptClick # The 'Mark Unread' button in the three dots menu    
+            }
+            else {
+                write-host "matched !!!!!!!!!!!!!!!!!!!"
+            }         
         }
-        $send = $false
+
         Enter-SeUrl "https://discord.com/channels/@me" -Driver $Driver
     }
     Write-Host -Fore Cyan "Sleeping for $sleepTime seconds"
