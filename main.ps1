@@ -83,52 +83,37 @@ while ($true) {
     foreach ($id in $staticNotSent.Keys) {
         # only continue if its been over 2 minutes since this users messages were last read
         if ( ((Get-Date) - (Get-Date $notSent[$id])).TotalSeconds -lt $longSleep ) { Write-Host -Fore Yellow "Skipping $id"; continue }
-        # $user = (Find-SeElement -driver $DM -classname "wrapper-1BJsBx").GetAttribute("aria-label") # This gets the users name
         Enter-SeUrl "https://discord.com/channels/@me/$id" -Driver $Driver
         $userName = (Find-SeElement -Driver $Driver -classname "username-1A8OIy")[0].GetAttribute("innerText")
         Write-Host -Fore Green "Checking $userName messages"
         $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
-        # $messagesList = Find-SeElement -Driver $Driver -classname "markup-2BOw-j" # These are all the messages in the chat
+        $notSent[$id] = $startTime
 
-
-        $send = $false
         $results = getNewMessages $messagesList
-        $keyWords = 0
-        foreach ($message in $results) {
-            if ((Find-SeElement -driver $message -tagname "div")[0].GetAttribute("innerText") -eq $keyWord) {
-                # Checks each messages text to see if it matches $keyWord
-                $send = $true
-                $keyWords += 1
-            }
+        if($results | where-object {$_.text -match "(\n|^)$keyWord`$"}){
+                # Send the message
+                $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
+                $IP = "1.2.3.4"
+                Write-Host -Fore Cyan "Sending IP $IP to $user"
+                Add-Content -Path $sentFile -Value $id # Send $id to file so the script knows to ignore new messages from that user
+                Send-SeKeys -Element $chatboxes[0] -Keys "$IP`n" # Send the IP
+                #remove this id from notsent
+                $notSent.Remove($id)
         }
-        $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
-        if ($send) {
-            $IP = "1.2.3.4"
-            Write-Host -Fore Cyan "Sending IP $IP to $user"
-            Add-Content -Path $sentFile -Value $id # Send $id to file so the script knows to ignore new messages from that user
-            Send-SeKeys -Element $chatboxes[0] -Keys "$IP`n" # Send the IP
-            #remove this id from notsent
-            $notSent.Remove($id)
-        }
-        else {
-            $notSent[$id] = $startTime
-        }
-        $notSent.GetEnumerator() | select-object -Property Key, Value | Export-csv -NoTypeInformation $notSentFile
-
         foreach ($result in $results) {
             if (-not ($result.text -match "(\n|^)$keyWord`$")) {
                 # Mark messages as unread, click the message so the elipsis button shows up
                 $result | Invoke-SeClick
-                (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] | Invoke-SeClick  -Driver $Driver -JavaScriptClick # The three dots that show up on hover
-                (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2]  | Invoke-SeClick   -Driver $Driver -JavaScriptClick # The 'Mark Unread' button in the three dots menu    
+                (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] | Invoke-SeClick -Driver $Driver -JavaScriptClick # The three dots that show up on hover
+                (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2]  | Invoke-SeClick -Driver $Driver -JavaScriptClick # The 'Mark Unread' button in the three dots menu    
             }
-            else {
-                write-host "matched !!!!!!!!!!!!!!!!!!!"
-            }         
         }
-
         Enter-SeUrl "https://discord.com/channels/@me" -Driver $Driver
+
     }
+    $notSent.GetEnumerator() | select-object -Property Key, Value | Export-csv -NoTypeInformation $notSentFile
+
     Write-Host -Fore Cyan "Sleeping for $sleepTime seconds"
     Start-Sleep $sleepTime
+    
 }
