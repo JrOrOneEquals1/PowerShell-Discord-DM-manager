@@ -3,6 +3,7 @@ $browser = "Chrome" # other options are "Firefox" and "Edge"
 $maximized = $false # set to True if you want the browser to start maximized
 $keyWord = "z"
 $sleepTime = 2 # time in seconds to sleep before checking messages again
+$longSleep = 20
 
 $sentFile = "$PSScriptRoot\WorkingDirectory\sentFile.txt"
 if (-not (Test-Path $sentFile) ) { $null = New-Item -ItemType File -Path $sentFile -Force }
@@ -81,13 +82,12 @@ while ($true) {
     $staticNotSent = $notSent.Clone()
     foreach ($id in $staticNotSent.Keys) {
         # only continue if its been over 2 minutes since this users messages were last read
-        if ( ((Get-Date) - (Get-Date $notSent[$id])).TotalSeconds -lt 20  ) { Write-Host "Skipping $id"; continue }
+        if ( ((Get-Date) - (Get-Date $notSent[$id])).TotalSeconds -lt $longSleep ) { Write-Host -Fore Yellow "Skipping $id"; continue }
         # $user = (Find-SeElement -driver $DM -classname "wrapper-1BJsBx").GetAttribute("aria-label") # This gets the users name
-        # Write-Host -Fore Cyan "Checking new message$(if($amount -ne 1){'s'}) from $user"
         Enter-SeUrl "https://discord.com/channels/@me/$id" -Driver $Driver
+        $userName = (Find-SeElement -Driver $Driver -classname "username-1A8OIy")[0].GetAttribute("innerText")
+        Write-Host -Fore Green "Checking $userName messages"
         $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
-        $lastMessageHeader = (Find-SeElement -Driver $Driver -classname "header-23xsNx")[-1]
-        $timeString = ((Find-SeElement -Driver $lastMessageHeader -tagname "span")[-1].GetAttribute("innerText")).replace("Today at", (Get-Date -format "yyyy/MM/dd"))
 
         $send = $false
         $result = getNewMessages $messagesList
