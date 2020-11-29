@@ -43,18 +43,17 @@ function Set-SeMousePosition {
 
 # This gets a list of all message after the 'new' bar on discord
 function getNewMessages($messagesList) {
-    $coords = (Find-SeElement -Driver $Driver -classname "divider-3_HH5L")[-1].Location.Y # The Y-coordinate of the 'new' bar
+    $coords = (Find-SeElement -Driver $Driver -classname "unreadPillCap-3_K2q2").Location.Y # The Y-coordinate of the 'new' bar
     $newMessages = @()
-    for ($i = 0; $i -lt $messagesList.Length; $i += 1) {
-        if ($messagesList[$i].Location.Y -gt $coords) {
-            $newMessages += ($messagesList[$i])
+    foreach ($message in $messagesList) {
+        if (($null -ne $coords) -and ($message.Location.Y -gt $coords)) {
+            $newMessages += $message
         }
     }
     return $newMessages
 }
 
 while ($true) {
-    $startTime = Get-Date -format "yyyy/MM/dd hh:mm:ss tt"
     $newDMLogEntries = @{}
     $notSent = @{}
     Get-Content $notSentFile | ConvertFrom-Csv | foreach { $notSent[$_.Key] = $_.Value }
@@ -85,9 +84,9 @@ while ($true) {
         if ( ((Get-Date) - (Get-Date $notSent[$id])).TotalSeconds -lt $longSleep ) { Write-Host -Fore Yellow "Skipping $id"; continue }
         Enter-SeUrl "https://discord.com/channels/@me/$id" -Driver $Driver
         $userName = (Find-SeElement -Driver $Driver -classname "username-1A8OIy")[0].GetAttribute("innerText")
-        Write-Host -Fore Green "Checking $userName messages"
+        Write-Host -Fore Green "Checking $userName messages $id"
         $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
-        $notSent[$id] = $startTime
+        $notSent[$id] = Get-Date -format "yyyy/MM/dd hh:mm:ss tt"
 
         $results = getNewMessages $messagesList
         if($results | where-object {$_.text -match "(\n|^)$keyWord`$"}){
@@ -96,7 +95,7 @@ while ($true) {
                 $IP = "1.2.3.4"
                 Write-Host -Fore Cyan "Sending IP $IP to $user"
                 Add-Content -Path $sentFile -Value $id # Send $id to file so the script knows to ignore new messages from that user
-                Send-SeKeys -Element $chatboxes[0] -Keys "$IP`n" # Send the IP
+                Send-SeKeys -Element $chatboxes[-1] -Keys "$IP`n" # Send the IP
                 #remove this id from notsent
                 $notSent.Remove($id)
         }
