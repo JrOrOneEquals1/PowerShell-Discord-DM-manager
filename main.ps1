@@ -5,11 +5,13 @@ $keyWord = "z"
 $sleepTime = 2 # time in seconds to sleep before checking messages again
 $longSleep = 20
 
+# creating working files/directories for keeping track of things to check and things that have been sent
 $sentFile = "$PSScriptRoot\WorkingDirectory\sentFile.txt"
 if (-not (Test-Path $sentFile) ) { $null = New-Item -ItemType File -Path $sentFile -Force }
 $notSentFile = "$PSScriptRoot\WorkingDirectory\notSentFile.txt"
 if (-not (Test-Path $notSentFile) ) { $null = New-Item -ItemType File -Path $notSentFile -Force }
 
+# create the web driver and open discord to the login page
 if ($null -eq $Driver) {
     $arguments = @()
     if ($maximized) { $arguments += 'start-maximized' }
@@ -24,20 +26,11 @@ if ($null -eq $Driver) {
     }
     Enter-SeUrl "https://www.discord.com/login" -Driver $Driver
 
-    Write-Host -NoNewLine 'Press any key to continue...';
+    Write-Host -NoNewLine 'After you have logged in to Discord on the neew $browser instance, press any key to continue...';
     $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 }
 
-
-# Got this from an issue, lets you hover over an element
-function Set-SeMousePosition {
-    [CmdletBinding()]
-    param ($Driver, $Element )
-    $Action = [OpenQA.Selenium.Interactions.Actions]::new($Driver)
-    $Action.MoveToElement($Element).Perform()
-}
-
-# This gets a list of all message after the 'new' bar on discord
+# This gets a list of all messages after the red 'new' bar on discord Direct Messages
 function getNewMessages($messagesList) {
     $coords = (Find-SeElement -Driver $Driver -classname "unreadPillCap-3_K2q2").Location.Y # The Y-coordinate of the 'new' bar
     $newMessages = @()
@@ -49,14 +42,19 @@ function getNewMessages($messagesList) {
     return $newMessages
 }
 
+# an infinite loop to check messages and then respond
 while ($true) {
     $newDMLogEntries = @{}
+    # notSent is a hashtable of anyone that has sent us a DM that we haven't sent a botMessage to yet.
+    # notSent is read from a file at the beginning of the while loop and written back out to a the file at the end of the while loop
     $notSent = @{}
     Get-Content $notSentFile | ConvertFrom-Csv | foreach { $notSent[$_.Key] = $_.Value }
+    # the sentFile is a list of discord user IDs that we have already sent a botMessage to (so they can be ignored by this bot)
     $sentIDs = Get-Content $sentFile
+    # a new DM shows up in a "listWrapper" html element, the are 4 static listwrappers, if we see more than these 4, we know we have a DM
     $listWrappers = Find-SeElement -driver $Driver -classname "listItemWrapper-3X98Pc"
     if ($listWrappers.Length -gt 4) {
-        $DMs = $listWrappers[1..$($listWrappers.Length - 4)]
+        $DMs = $listWrappers[1..$($listWrappers.Length - 4)] # we ignore the static listWrappers (the first one and the last 3)
     }
     else { $DMs = @() }
     # add this DM user to the list of people to pay attention to
@@ -118,6 +116,5 @@ while ($true) {
     $notSent.GetEnumerator() | select-object -Property Key, Value | Export-csv -NoTypeInformation $notSentFile
 
     Write-Host -Fore Cyan "Sleeping for $sleepTime seconds"
-    Start-Sleep $sleepTime
-    
+    Start-Sleep $sleepTime 
 }
