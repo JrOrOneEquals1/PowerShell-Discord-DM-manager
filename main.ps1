@@ -1,143 +1,120 @@
-# Get Discord credentials, or ask if they aren't there
-try {
-    $read = Get-Content -Path "./discordCreds.txt" -erroraction 'silentlycontinue'
-    $username = $read[0]
-    $password = $read[1]
-}
-catch {
-    $username = Read-Host -Prompt "User Name"
-    $password = Read-Host -Prompt "Password"
-    Set-Content -Path "./discordCreds.txt" -Value "$username`n$password"
-}
-$headless = Read-Host -Prompt "Headless? [y/n]"
-$keyWord = Read-Host -Prompt "Messaging keyword"
-$fileName = Read-Host -Prompt "IP File Path"
-$ipList = Get-Content -Path $fileName
-$ips = $ipList.length-1
+# Configuration
+$browser = "Chrome" # other options are "Firefox" and "Edge"
+$maximized = $false # set to True if you want the browser to start maximized
+$keyWord = "z"
+$sleepTime = 2 # time in seconds to sleep before checking messages again
+$longSleep = 20
 
-if($headless -eq "n") {
-    $Driver = Start-SeChrome -Arguments @('start-maximized') -Quiet
-}
-else {
-    $Driver = Start-SeChrome -Arguments @('headless', 'start-maximized') -Quiet
-}
-Enter-SeUrl "https://www.discord.com/login" -Driver $Driver
+# creating working files/directories for keeping track of things to check and things that have been sent
+$sentFile = "$PSScriptRoot\WorkingDirectory\sentFile.txt"
+if (-not (Test-Path $sentFile) ) { $null = New-Item -ItemType File -Path $sentFile -Force }
+$notSentFile = "$PSScriptRoot\WorkingDirectory\notSentFile.txt"
+if (-not (Test-Path $notSentFile) ) { $null = New-Item -ItemType File -Path $notSentFile -Force }
 
-# Got this from an issue, lets you hover over an element
-function Set-SeMousePosition {
-    [CmdletBinding()]
-    param ($Driver, $Element )
-    $Action = [OpenQA.Selenium.Interactions.Actions]::new($Driver)
-    $Action.MoveToElement($Element).Perform()
+# create the web driver and open discord to the login page
+if ($null -eq $Driver) {
+    $arguments = @()
+    if ($maximized) { $arguments += 'start-maximized' }
+    if ($browser -eq "edge") {
+        $Driver = Start-SeEdge -Arguments $arguments -Quiet
+    }
+    elseif ($browser -eq "Firefox") {
+        $Driver = Start-SeFirefox -Arguments $arguments -Quiet
+    }
+    else {
+        $Driver = Start-SeChrome -Arguments $arguments -Quiet
+    }
+    Enter-SeUrl "https://www.discord.com/login" -Driver $Driver
+
+    Write-Host -NoNewLine 'After you have logged in to Discord on the neew $browser instance, press any key to continue...';
+    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 }
 
-# This gets a list of all message after the 'new' bar on discord
+# This gets a list of all messages after the red 'new' bar on discord Direct Messages
 function getNewMessages($messagesList) {
-    $coords = (Find-SeElement -Driver $Driver -classname "divider-3_HH5L")[-1].Location.Y # The Y-coordinate of the 'new' bar
+    $coords = (Find-SeElement -Driver $Driver -classname "unreadPillCap-3_K2q2").Location.Y # The Y-coordinate of the 'new' bar
     $newMessages = @()
-    for($i = 0; $i -lt $messagesList.Length; $i += 1) {
-        if($messagesList[$i].Location.Y -gt $coords) {
-            $newMessages += ($messagesList[$i])
+    foreach ($message in $messagesList) {
+        if (($null -ne $coords) -and ($message.Location.Y -gt $coords)) {
+            $newMessages += $message
         }
     }
     return $newMessages
 }
 
+# an infinite loop to check messages and then respond
+while ($true) {
+    $newDMLogEntries = @{}
+    # notSent is a hashtable of anyone that has sent us a DM that we haven't sent a botMessage to yet.
+    # notSent is read from a file at the beginning of the while loop and written back out to a the file at the end of the while loop
+    $notSent = @{}
+    Get-Content $notSentFile | ConvertFrom-Csv | foreach { $notSent[$_.Key] = $_.Value }
+    # the sentFile is a list of discord user IDs that we have already sent a botMessage to (so they can be ignored by this bot)
+    $sentIDs = Get-Content $sentFile
+    # a new DM shows up in a "listWrapper" html element, the are 4 static listwrappers, if we see more than these 4, we know we have a DM
+    $listWrappers = Find-SeElement -driver $Driver -classname "listItemWrapper-3X98Pc"
+    if ($listWrappers.Length -gt 4) {
+        $DMs = $listWrappers[1..$($listWrappers.Length - 4)] # we ignore the static listWrappers (the first one and the last 3)
+    }
+    else { $DMs = @() }
+    # add this DM user to the list of people to pay attention to
+    foreach ($DM in $DMs) {
+        $attribute = (Find-SeElement -driver $DM -classname "wrapper-1BJsBx").GetAttribute("href") # This is the 'guildsnav___USERID' part of the menu buttons
+        $id = $attribute.split('/')[-1]
+        if (($null -eq $notSent ) -or (-not $notSent[$id])) {
+            $newDMLogEntries += @{$id = $(Get-Date "1/1/20") }
+        }
+    }
+    # add new user to list of users to monitor if we haven't already sent the message to them
+    foreach ($newDMKey in $newDMLogEntries.Keys) {
+        if ((-not $notSent.ContainsKey($newDMKey)) -and (-not ($sentIDs -contains $newDMKey))) {
+            $notSent += @{ $newDMKey = $newDMLogEntries[$newDMKey] }
+        }
+    }
 
-$Element = Find-SeElement -Driver $Driver -ClassName "inputDefault-_djjkz" # Username/email and password login inputs
-$UN = $Element[0]
-Send-SeKeys -Element $UN -Keys $username
-$PW = $Element[1]
-Send-SeKeys -Element $PW -Keys $password
-$login = Find-SeElement -Driver $Driver -ClassName "marginBottom8-AtZOdT" # Login button
-Invoke-SeClick -Element $login[1]
-# This gets the amount of servers the user is in, to know which of the buttons are users or not.
-$newMessage = Find-SeElement -driver $Driver -classname "wrapper-1BJsBx" # The person/server menu buttons on the top left
-$menus = $newMessage.length
-for($i = 0; $i -lt $newMessage.length; $i++) {
-    $attrib = $newMessage[$i]
-    try {
-        if($attrib.GetAttribute("href").substring(10, 3) -eq "@me") {
-            $menus -= 1
+    $staticNotSent = $notSent.Clone()
+    foreach ($id in $staticNotSent.Keys) {
+        # only continue if its been over $longSleep seconds since this users messages were last read
+        if ( ((Get-Date) - (Get-Date $notSent[$id])).TotalSeconds -lt $longSleep ) { Write-Host -Fore Yellow "Skipping $id"; continue }
+        Enter-SeUrl "https://discord.com/channels/@me/$id" -Driver $Driver
+        $userName = (Find-SeElement -Driver $Driver -classname "title-29uC1r").GetAttribute("innerText")
+        Write-Host -Fore Green "Checking $userName messages $id"
+        $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
+        $notSent[$id] = Get-Date -format "yyyy/MM/dd hh:mm:ss tt"
+
+        $results = getNewMessages $messagesList
+        if ($results | where-object { $_.text -match "(\n|^)$keyWord`$" }) {
+            # Send the message
+            $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
+            $message = Get-BotMessage $id $userName
+            if ($message) {
+                Add-Content -Path $sentFile -Value $id # Send $id to file so the script knows to ignore new messages from that user
+                Write-Host -Fore Cyan "Sending message to $userName"
+                foreach ($line in $message.split("`n")) {
+                    Send-SeKeys -Element $chatboxes[-1] -Keys "$line" 
+                    Send-SeKeys -Element $chatboxes[-1] -Keys "{{shift}}{{ENTER}}"
+                }
+                Send-SeKeys -Element $chatboxes[-1] -Keys "{{ENTER}}"
+                Start-Sleep 1
+                #remove this id from notsent
+                $notSent.Remove($id)
+            }
+            else { Write-Host -ForegroundColor Red "No message Returned, no message sent to $id $userName" }
+        }        
+        foreach ($result in $results) {
+            if (-not ($result.text -match "(\n|^)$keyWord`$")) {
+                # Mark message as unread, click the message so the elipsis button shows up
+                $result | Invoke-SeClick
+                (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] | Invoke-SeClick -Driver $Driver -JavaScriptClick # The three dots that show up on hover
+                (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2]  | Invoke-SeClick -Driver $Driver -JavaScriptClick # The 'Mark Unread' button in the three dots menu
+                break   
+            }
         }
+        Enter-SeUrl "https://discord.com/channels/@me" -Driver $Driver
+
     }
-    catch {
-        continue
-    }
-}
-Write-Host "$menus servers being ignored."
-Write-Host "Ready."
-$menus += 1
-while($true) {
-    $newMessage = Find-SeElement -driver $Driver -classname "wrapper-1BJsBx" # The person/server menu buttons on the top left
-    if($newMessage.Length -le ($menus)) {
-        Start-Sleep 2
-        continue
-    }
-    $attribute = $newMessage[1].GetAttribute("data-list-item-id") # This is the 'guildsnav___USERID' part of the menu buttons
-    $id = $attribute.Substring(12, 18)
-    # This is the little red icon in the bottom right of each menu button
-    $amount = (Find-SeElement -driver $driver -classname "numberBadge-2s8kKX").GetAttribute("innerText")
-    $sent = Get-Content -path "./sentFile.txt" -erroraction "silentlycontinue"
-    $notSent = Get-Content -path "./notSentFile.txt" -erroraction "silentlycontinue"
-    try {
-        # This checks if $id has already been sent an IP, or if the script has already checked that chat for the current messages
-        if($sent -icontains $id -or ($notSent -icontains $id+":"+$amount)) {
-            continue
-        }
-    }
-    catch {
-        continue
-    }
-    $user = $newMessage[1].GetAttribute("aria-label") # This gets the users name
-    $addS = ''
-    if($amount -gt 1) { # Gets correct usage for 'message' or 'messages'
-        $addS = 's'
-    }
-    Write-Host "Checking new message$addS from $user"
-    Enter-SeUrl "https://discord.com/channels/@me/$id" -Driver $Driver
-    $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
-    $send = $false
-    $result = getNewMessages $messagesList
-    $keyWords = 0
-    for($i = 0; $i -lt $result.length; $i++) {
-        $message = $result[$i]
-        if((Find-SeElement -driver $message -tagname "div")[0].GetAttribute("innerText") -eq $keyWord) { # Checks each messages text to see if it matches $keyWord
-            $send = $true
-            $keyWords += 1
-        }
-        elseif ($ipList -icontains $keyWord) {
-            $keyWords += 1
-        }
-    }
-    $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
-    if($send) {
-        $IP = $ipList[$ips]
-        Write-Host "Sent IP $IP to $user"
-        Add-Content -Path "./sentFile.txt" -Value $id # Send $id to file so the script knows to ignore new messages from that user
-        Send-SeKeys -Element $chatboxes[0] -Keys "$IP`n" # Send the IP
-        $ips -= 1
-        Set-Content -Path $fileName -Value $ipList[0]
-        for($i = 1; $i -le $ips; $i += 1) {
-            Add-Content -Path $fileName -Value $ipList[$i]
-        }
-        $ipList = Get-Content -Path $fileName
-    }
-    else {
-        $length = $result.Length
-        # Send $id, along with the amount of new messages, so the script knows to ignore until another message comes in
-        Add-Content -Path "./notSentFile.txt" -Value "${id}:$length"
-    }
-    # Set mouse to hover over message input box.  Prevents bugs from happening when mouse is already where it needs to be later
-    Set-SeMousePosition -Driver $Driver -Element $chatboxes[0]
-    if($result.Length -gt $keyWords -or (!$send -and ($result.Length -eq 1))) {
-        $clickee = $result[0]
-        Set-SeMousePosition -Driver $Driver -Element $clickee # Set mouse to hover over the earliest new message
-        $button = (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] # The three dots that show up on hover
-        Send-SeClick -Element $button
-        $clickee = (Find-SeElement -Driver $Driver -classname "label-22pbtT")[2] # The 'Mark Unread' button in the three dots menu
-        Send-SeClick -Element $clickee
-    }
-    $send = $false
-    Enter-SeUrl "https://discord.com/channels/@me" -Driver $Driver
+    $notSent.GetEnumerator() | select-object -Property Key, Value | Export-csv -NoTypeInformation $notSentFile
+
+    Write-Host -Fore Cyan "Sleeping for $sleepTime seconds"
+    Start-Sleep $sleepTime 
 }
