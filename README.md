@@ -34,7 +34,7 @@ Once connected to the remote desktop, open the Chrome browser and click on the '
 
 ## Usage
 
-Before starting the PowerShell script, remember to configure your settings for keywords, browswer and timing at the top of the file.
+Before starting the PowerShell script, remember to configure your settings for keywords, browser and timing at the top of the file.
 
 Start the PowerShell Script as follows:
 
