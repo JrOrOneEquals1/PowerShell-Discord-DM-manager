@@ -1,5 +1,4 @@
-# Configuration
-$keyWord = "z"
+$keyWords = @("z", "pizza") # an array of keywords to respond to. The keyword will be matched to the whole line of the message, but not a substring.
 $sleepTime = 2 # time in seconds to sleep before checking messages again
 $longSleep = 20
 $browser = "Chrome" # other options are "Firefox" and "Edge" but only Chrome has been tested by the developers
@@ -24,13 +23,10 @@ if ($null -eq $Driver) {
         exit
     }
     Enter-SeUrl "https://www.discord.com/login" -Driver $Driver
-
-    Write-Host -NoNewLine "Log into Discord on the new $browser instance that popped up, then press any key to continue...";
-    $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown');
 }
 
 # This gets a list of all messages after the red 'new' bar on discord Direct Messages
-function getNewMessages($messagesList) {
+function Get-NewMessages($messagesList) {
     $coords = (Find-SeElement -Driver $Driver -classname "unreadPillCap-3_K2q2").Location.Y # The Y-coordinate of the 'new' bar
     $newMessages = @()
     foreach ($message in $messagesList) {
@@ -39,6 +35,13 @@ function getNewMessages($messagesList) {
         }
     }
     return $newMessages
+}
+
+function MatchKeyword ($message) {
+    foreach ($keyWord in $keyWords) {
+        if ($message -match "(\n|^)$keyWord`$") { return $true }
+    }
+    return $false
 }
 
 # an infinite loop to check messages and then respond
@@ -73,8 +76,8 @@ while ($true) {
         $messagesList = Find-SeElement -Driver $Driver -classname "contents-2mQqc9" # These are all the messages in the chat
         $notSent[$id] = Get-Date -format "yyyy/MM/dd hh:mm:ss tt"
 
-        $results = getNewMessages $messagesList
-        if ($results | where-object { $_.text -match "(\n|^)$keyWord`$" }) {
+        $results = Get-NewMessages $messagesList
+        if ($results | where-object { MatchKeyword $_.text }) {
             # Send the message
             $chatboxes = Find-SeElement -Driver $Driver -classname "slateTextArea-1Mkdgw" # The messaging input box
             $message = Get-BotMessage $id $userName
@@ -93,7 +96,7 @@ while ($true) {
             else { Write-Host -ForegroundColor Red "No message Returned, no message sent to $id $userName" }
         }        
         foreach ($result in $results) {
-            if (-not ($result.text -match "(\n|^)$keyWord`$")) {
+            if (-not (MatchKeyword $result.text)) {
                 # Mark message as unread, click the message so the elipsis button shows up
                 $result | Invoke-SeClick
                 (Find-SeElement -Driver $Driver -classname "button-1ZiXG9")[2] | Invoke-SeClick -Driver $Driver -JavaScriptClick # The three dots that show up on hover
