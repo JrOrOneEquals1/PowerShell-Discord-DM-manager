@@ -1,7 +1,11 @@
 # PowerShell Discord DM Manager
 ## Description
 
-This PowerShell script will use the Selenium Web Driver with the Chrome browser to automatically respond to Direct Messages (DMs) that you receive in [Discord](https://discord.com) when keywords that you specify are received. It will only respond with the keyword triggered message once per Discord user. This has only been tested on Windows.
+This PowerShell script will use the Selenium Web Driver with the Chrome browser to automatically respond to Direct Messages (DMs) that you receive in [Discord](https://discord.com) when keywords that you specify are received. It will only respond with the keyword triggered message once per Discord user. 
+
+This tool utilizes your own Discord credentials, it does not require an API key or any Discord Bot permissions.
+
+This has only been tested on Windows.
 
 ## Installation
 First, you will need to install [Selenium for PowerShell](https://github.com/adamdriscoll/selenium-powershell). This can be done from a PowerShell command prompt with the following command.
