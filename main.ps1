@@ -1,6 +1,6 @@
-$keyWords = @("z", "pizza") # an array of keywords to respond to. The keyword will be matched to the whole line of the message, but not a substring.
+$keyWords = @("ip please", "`"ip please`"","ip address", "`"ip address`"") # an array of keywords to respond to. The keyword will be matched to the whole line of the message, but not a substring.
 $sleepTime = 2 # time in seconds to sleep before checking messages again
-$longSleep = 20
+$longSleep = 120
 $browser = "Chrome" # other options are "Firefox" and "Edge" but only Chrome has been tested by the developers
 $maximized = $false # set to True if you want the browser to start maximized
 
@@ -15,7 +15,7 @@ if ($null -eq $Driver) {
     $arguments = @()
     if ($maximized) { $arguments += 'start-maximized' }
     try {
-        $Driver = &"Start-Se$browser" -Arguments $arguments -Quiet
+        $Driver = Start-SeChrome -Arguments $arguments -Quiet
     }
     catch {
         Write-Host -ForegroundColor Red "There was a problem starting the Selenium Web Driver for $browser. Please check the README file for this project for details on installing it."
