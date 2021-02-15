@@ -1,6 +1,6 @@
-$keyWords = @("ip please", "`"ip please`"","ip address", "`"ip address`"") # an array of keywords to respond to. The keyword will be matched to the whole line of the message, but not a substring.
+$keyWords = @("lab ip", "`"lab ip`"") # an array of keywords to respond to. The keyword will be matched to the whole line of the message, but not a substring.
 $sleepTime = 2 # time in seconds to sleep before checking messages again
-$longSleep = 120
+$longSleep = 60
 $browser = "Chrome" # other options are "Firefox" and "Edge" but only Chrome has been tested by the developers
 $maximized = $false # set to True if you want the browser to start maximized
 
